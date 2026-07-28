@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salt Spring ish</title>
+<link rel="icon" type="image/png" href="island.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script>
+  // The photo fades in only on the first page of a visit — navigating
+  // between pages keeps it steady instead of blinking out and back
+  if (sessionStorage.getItem('ss-bg-seen')) document.documentElement.classList.add('bg-instant');
+  else sessionStorage.setItem('ss-bg-seen', '1');
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* hold the old page's pixels until the new page paints — no blank flash */
+  @view-transition { navigation: auto; }
+  html { background: #dddcd8; }
+
+  body {
+    font-family: 'Instrument Sans', sans-serif;
+    min-height: 100vh;
+    min-height: 100lvh;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* Same halftone photo backdrop as the rest of the site */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100lvh;
+    z-index: -1;
+    background: url('background.jpg') center / cover no-repeat;
+    animation: bg-fade 0.5s ease-out both;
+  }
+  @keyframes bg-fade {
+    from { opacity: 0; }
+  }
+  html.bg-instant body::before { animation: none; }
+
+  /* ── Close button — foggy glass chip like the link buttons ── */
+  .close-btn {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: blur(9px);
+    backdrop-filter: blur(9px);
+    transform: translateZ(0); /* own layer from the start = no first-hover flicker */
+    color: #fff;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .close-btn:hover {
+    background: #fff;
+    color: #111;
+  }
+
+  /* ── Entrance: the key tag slides up like the receipt does ── */
+  .keytag-enter {
+    margin: auto;
+    animation: keytag-slide 1.7s cubic-bezier(0.05, 0.7, 0.1, 1) 0.4s both;
+  }
+  @keyframes keytag-slide {
+    from { transform: translateY(105vh); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body::before, .keytag-enter { animation: none; }
+  }
+
+  .keytag-wrap {
+    transform-style: preserve-3d; /* the bend layer keeps its 3D angle */
+    will-change: transform;
+  }
+  .keytag-bend {
+    will-change: transform;
+  }
+  .keytag {
+    display: block;
+    height: min(64vh, 600px);
+    width: auto;
+    max-width: 86vw;
+    object-fit: contain;
+    /* shadow follows the tag's own cut-out shape and rides its tilt */
+    filter: drop-shadow(0 16px 22px rgba(0, 0, 0, 0.35));
+  }
+
+  /* ── Links under the tag ── */
+  .stay-links {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin-top: 30px;
+  }
+  /* tooltip-style chips: foggy glass at rest, solid white on hover */
+  .stay-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: blur(9px);
+    backdrop-filter: blur(9px);
+    transform: translateZ(0); /* own layer from the start = no first-hover flicker */
+    color: #fff;
+    font-family: 'Geist Mono', 'Courier New', monospace;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 7px 12px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .stay-link:hover {
+    background: #fff;
+    color: #111;
+  }
+
+  @media (max-width: 600px) {
+    .stay-links {
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    /* the tag gives up height on short screens so the links always fit
+       on one screen — svh = the viewport at its smallest, with the
+       browser bars showing, so nothing hides behind them */
+    .keytag {
+      height: min(64svh, calc(100svh - 250px));
+    }
+  }
+</style>
+</head>
+<body>
+
+<a class="close-btn" href="index.html" aria-label="Back to home"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.3"/></svg></a>
+
+<div class="keytag-enter">
+  <div class="keytag-wrap">
+    <div class="keytag-bend">
+      <!-- Demo build: an invented address and dates, matching the rest of
+           the site. Transparent background on purpose — the drop-shadow is
+           cut from the image's own shape, not a rectangle. -->
+      <img class="keytag" src="keytag.png" alt="Motel key tag — Somewhere By the Water, Sep 18–20">
+    </div>
+  </div>
+  <div class="stay-links">
+    <!-- Demo build: both chips keep the look of "opens in a new tab" links
+         but deliberately have no href — there's nothing real to open -->
+    <a class="stay-link" role="link" aria-disabled="true">airbnb
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.6"/></svg>
+    </a>
+    <a class="stay-link" role="link" aria-disabled="true">google maps
+      <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.6"/></svg>
+    </a>
+  </div>
+</div>
+
+<script src="trail.js"></script>
+<script>
+  // 3D tilt — same physics as the receipt: a soft spring leans the tag
+  // toward the cursor, and the bend layer flexes a beat behind.
+  (function() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!window.matchMedia('(pointer: fine)').matches) return; // no cursor on touch screens
+    const wrap = document.querySelector('.keytag-wrap');
+    const bend = document.querySelector('.keytag-bend');
+    const MAX_TILT = 5; // a hanging key tag can lean a little more than paper
+    const BEND = 1.2;
+
+    let targetX = 0, targetY = 0;
+    let x = 0, y = 0, velX = 0, velY = 0;
+    let lagX = 0, lagY = 0;
+
+    window.addEventListener('mousemove', (e) => {
+      const r = wrap.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      targetX = Math.max(-1, Math.min(1, (e.clientX - cx) / (window.innerWidth / 2)));
+      targetY = Math.max(-1, Math.min(1, (e.clientY - cy) / (window.innerHeight / 2)));
+    });
+
+    function tick() {
+      velX += (targetX - x) * 0.028; velX *= 0.85; x += velX;
+      velY += (targetY - y) * 0.028; velY *= 0.85; y += velY;
+      lagX += (x - lagX) * 0.12;
+      lagY += (y - lagY) * 0.12;
+      wrap.style.transform =
+        'perspective(900px)' +
+        ' rotateX(' + (-y * MAX_TILT).toFixed(2) + 'deg)' +
+        ' rotateY(' + (x * MAX_TILT).toFixed(2) + 'deg)';
+      bend.style.transform =
+        'rotateX(' + (-(y - lagY) * MAX_TILT * BEND).toFixed(2) + 'deg)' +
+        ' rotateY(' + ((x - lagX) * MAX_TILT * BEND).toFixed(2) + 'deg)';
+      requestAnimationFrame(tick);
+    }
+
+    // hold the tilt until the tag has finished sliding in
+    let started = false;
+    const start = () => { if (!started) { started = true; tick(); } };
+    document.querySelector('.keytag-enter')
+      .addEventListener('animationend', start, { once: true });
+    setTimeout(start, 3200); // safety net in case the animation event never fires
+  })();
+</script>
+</body>
+</html>

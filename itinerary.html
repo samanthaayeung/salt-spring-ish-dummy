@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salt Spring ish</title>
+<link rel="icon" type="image/png" href="island.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;700&family=Instrument+Sans:wght@600;700&display=swap" rel="stylesheet">
+<script>
+  // The photo fades in only on the first page of a visit — navigating
+  // between pages keeps it steady instead of blinking out and back
+  if (sessionStorage.getItem('ss-bg-seen')) document.documentElement.classList.add('bg-instant');
+  else sessionStorage.setItem('ss-bg-seen', '1');
+</script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* hold the old page's pixels until the new page paints — no blank flash */
+  @view-transition { navigation: auto; }
+  html { background: #dddcd8; }
+
+  /* The page itself never scrolls — the .scroll container does, so the
+     fixed photo stays perfectly still while only the paper moves. */
+  html, body { height: 100%; }
+  body {
+    font-family: 'Geist Mono', 'Courier New', monospace;
+    overflow: hidden;
+  }
+  .scroll {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    /* top padding clears the x button (14px + 28px chip) with room to spare,
+       so the paper never slides up underneath it */
+    padding: 3.75rem 1rem 2.5rem;
+    position: relative;
+  }
+
+  /* Same halftone photo backdrop as the rest of the site */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    height: 100lvh;
+    z-index: -1;
+    background: url('background.jpg') center / cover no-repeat;
+    animation: bg-fade 0.5s ease-out both;
+  }
+  @keyframes bg-fade {
+    from { opacity: 0; }
+  }
+  html.bg-instant body::before { animation: none; }
+
+  /* ── Close button — foggy glass chip; scrolls away with the paper ── */
+  .close-btn {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: blur(9px);
+    backdrop-filter: blur(9px);
+    transform: translateZ(0); /* own layer from the start = no first-hover flicker */
+    color: #fff;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .close-btn:hover {
+    background: #fff;
+    color: #111;
+  }
+  /* wide screens: the paper can't reach this corner, so the x pins to the
+     viewport and stays visible while the page scrolls */
+  @media (min-width: 900px) {
+    .close-btn { position: fixed; }
+  }
+
+  /* ── Entrance: the schedule slides up like the receipt does ── */
+  .sheet-enter {
+    width: 100%;
+    max-width: 680px;
+    margin: auto;
+    animation: sheet-slide 1.7s cubic-bezier(0.05, 0.7, 0.1, 1) 0.4s both;
+  }
+  @keyframes sheet-slide {
+    from { transform: translateY(105vh); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body::before, .sheet-enter { animation: none; }
+  }
+  html.entering .scroll { overflow: hidden; }
+
+  .sheet-wrap {
+    width: 100%;
+    position: relative;
+  }
+  .sheet-shadow {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
+    transform: translate3d(0, 12px, 0);
+  }
+
+  /* ── The paper itself — same translucent frosted stock as the receipt ── */
+  .sheet {
+    background: rgba(255, 255, 255, 0.88);
+    -webkit-backdrop-filter: blur(7px);
+    backdrop-filter: blur(7px);
+    padding: 1.4rem 1.5rem 1.6rem;
+  }
+  .sheet > * { opacity: 0.85; } /* faded thermal ink, like the receipt */
+
+  .sheet-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 0.4rem;
+  }
+  .sheet-title {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    color: #000;
+  }
+  /* chip that opens the source Google Sheet, in the receipt-tooltip style */
+  .sheet-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1px dashed #bbb;
+    color: #111;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 4px 8px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .sheet-link-btn:hover {
+    background: #111;
+    color: #fff;
+  }
+  .sheet-actions {
+    display: inline-flex;
+    gap: 6px;
+  }
+  button.sheet-link-btn { font-family: inherit; }
+  /* the refresh arrow spins while a re-sync is in flight */
+  .spinning {
+    animation: refresh-spin 0.8s linear infinite;
+  }
+  @keyframes refresh-spin {
+    to { transform: rotate(360deg); }
+  }
+  .dash {
+    border: none;
+    border-top: 1px dashed #bbb;
+    margin: 0.8rem 0;
+  }
+
+  /* status line while the sheet loads / if it fails */
+  .sheet-status {
+    font-size: 11px;
+    color: #999;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 1rem 0;
+  }
+  .sheet-status a { color: #555; }
+  /* the receipt's ornament glyphs stand in for a loading "..." */
+  .status-glyphs {
+    font-size: 12px;
+    word-spacing: 3px;
+  }
+
+  /* ── Day sections: prominent headers that open and close their rows,
+        the paper growing and shrinking with them ── */
+  .day-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    background: none;
+    border: none;
+    /* the rule under the date stays visible even when the day is closed */
+    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 10px 0 9px;
+    margin-top: 0.5rem;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #000;
+    transition: background-color 0.15s ease;
+  }
+  /* hover states only on devices with a real cursor — on phones a tap
+     "sticks" the hover style on, so touch gets none at all */
+  @media (hover: hover) {
+    .day-head:hover { background: rgba(0, 0, 0, 0.04); }
+    .day-head:hover .day-toggle { color: #000; }
+  }
+  .day-toggle {
+    color: #999;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1;
+    transition: color 0.15s ease;
+  }
+  /* breathing room between the date rule and the first entry,
+     and no doubled line right under the date */
+  .day-inner .it-row:first-child {
+    border-top: none;
+    padding-top: 10px;
+  }
+  /* 0fr ↔ 1fr grid rows = height animates smoothly to/from "auto" */
+  .day-body {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 0.4s ease;
+  }
+  .day-inner {
+    overflow: hidden;
+    min-height: 0;
+  }
+  .day.closed .day-body { grid-template-rows: 0fr; }
+  @media (prefers-reduced-motion: reduce) {
+    .day-body { transition: none; }
+  }
+  .it-row {
+    display: grid;
+    /* time squeezed narrow; location (the link column) gets the extra room */
+    grid-template-columns: 86px 1fr 1.15fr 1.1fr;
+    gap: 2px 14px;
+    font-size: 11.5px;
+    color: #333;
+    padding: 7px 0;
+    letter-spacing: 0.02em;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+  }
+  .it-time { color: #999; }
+  .it-activity { font-weight: 700; color: #111; }
+  .it-location, .it-notes { white-space: pre-line; }
+  .it-notes { color: #777; }
+  /* links look and behave the same in every column */
+  .it-row a {
+    color: #111;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .it-row a svg {
+    margin-left: 2px;
+    vertical-align: 1px;
+  }
+  /* the last word travels with the arrow — the arrow can never wrap
+     onto a line of its own */
+  .it-row a .link-tail { white-space: nowrap; }
+  @media (hover: hover) {
+    .it-row a { transition: background-color 0.15s ease, color 0.15s ease; }
+    .it-row a:hover {
+      background: #111;
+      color: #fff;
+      text-decoration: none;
+    }
+  }
+
+  /* Phones: each entry stacks — time above, details in one column */
+  @media (max-width: 600px) {
+    .scroll { padding: 4.5rem 1.2rem 2.5rem; }
+    .it-row {
+      grid-template-columns: 1fr;
+      gap: 3px;
+      padding: 11px 0;
+    }
+    .it-time { font-size: 10px; }
+    /* stacked rows read as two groups: time + activity, then a beat of
+       air, then the links + notes */
+    .it-location { margin-top: 6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="scroll">
+
+<a class="close-btn" href="index.html" aria-label="Back to home"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.3"/></svg></a>
+
+<div class="sheet-enter">
+  <div class="sheet-wrap">
+    <div class="sheet-shadow" aria-hidden="true"></div>
+    <div class="sheet-bend">
+      <div class="sheet">
+        <div class="sheet-head">
+          <span class="sheet-title">Itinerary</span>
+          <span class="sheet-actions">
+            <!-- Demo build: the chip keeps the look of a link out to the
+                 source sheet, but deliberately has no href — nothing to open -->
+            <a class="sheet-link-btn" role="link" aria-disabled="true">google sheet
+              <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.6"/></svg>
+            </a>
+            <button class="sheet-link-btn" id="refreshBtn" type="button" aria-label="Refresh from the sheet">
+              <svg id="refreshIcon" width="12" height="12" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"/></svg>
+            </button>
+          </span>
+        </div>
+        <hr class="dash">
+        <!-- Demo build: the schedule below is invented and typed straight
+             into the page. On the real site these rows were printed from a
+             Google Sheet; here nothing is fetched. The locations are styled
+             as "opens in a new tab" links but have no href on purpose. -->
+        <div id="rows">
+
+        <div class="day">
+          <button class="day-head" type="button" aria-expanded="true">
+            <span>Friday, September 18</span>
+            <span class="day-toggle">−</span>
+          </button>
+          <div class="day-body"><div class="day-inner">
+            <div class="it-row">
+              <span class="it-time">9:00 AM</span>
+              <span class="it-activity">Leave Vancouver</span>
+              <span class="it-location"><a>Olympic <span class="link-tail">Village<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">two cars — bring snacks</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">10:45 AM–12:10 PM</span>
+              <span class="it-activity">Ferry to Swartz Bay</span>
+              <span class="it-location"><a>Tsawwassen <span class="link-tail">Terminal<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~45min drive
+reservation under Sam</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">1:00 PM</span>
+              <span class="it-activity">Lunch</span>
+              <span class="it-location"><a>Blue Heron <span class="link-tail">Café<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~15min drive
+patio seats nine</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">3:00 PM</span>
+              <span class="it-activity">Check in</span>
+              <span class="it-location"><a>Sidney <span class="link-tail">house<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">door code is in the group chat</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">6:30 PM</span>
+              <span class="it-activity">Group dinner</span>
+              <span class="it-location"><a>Beacon Ave <span class="link-tail">Pub<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~5min drive
+table booked for 6:30</span>
+            </div>
+          </div></div>
+        </div>
+
+        <div class="day">
+          <button class="day-head" type="button" aria-expanded="true">
+            <span>Saturday, September 19</span>
+            <span class="day-toggle">−</span>
+          </button>
+          <div class="day-body"><div class="day-inner">
+            <div class="it-row">
+              <span class="it-time">8:30 AM</span>
+              <span class="it-activity">Breakfast in</span>
+              <span class="it-location">Sidney house</span>
+              <span class="it-notes">eggs and coffee, no plan</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">10:05 AM–10:40 AM</span>
+              <span class="it-activity">Ferry to Salt Spring</span>
+              <span class="it-location"><a>Swartz Bay <span class="link-tail">Terminal<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~10min drive
+walk on if both cars are full</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">11:30 AM</span>
+              <span class="it-activity">Kayak tour</span>
+              <span class="it-location"><a>Fulford Harbour <span class="link-tail">Kayaking<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~20min drive
+3 hours, wetsuits provided</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">3:00 PM</span>
+              <span class="it-activity">Late lunch</span>
+              <span class="it-location"><a>Salt Spring <span class="link-tail">Market<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~25min drive
+cash helps</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">5:15 PM</span>
+              <span class="it-activity">Afternoon walk</span>
+              <span class="it-location"><a>Ruckle Provincial <span class="link-tail">Park<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~20min drive
+easy loop, about an hour</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">7:40 PM</span>
+              <span class="it-activity">Ferry back</span>
+              <span class="it-location"><a>Fulford <span class="link-tail">Harbour<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~15min drive</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">8:45 PM</span>
+              <span class="it-activity">Dinner in</span>
+              <span class="it-location">Sidney house</span>
+              <span class="it-notes">pasta night — everyone chips in</span>
+            </div>
+          </div></div>
+        </div>
+
+        <div class="day">
+          <button class="day-head" type="button" aria-expanded="true">
+            <span>Sunday, September 20</span>
+            <span class="day-toggle">−</span>
+          </button>
+          <div class="day-body"><div class="day-inner">
+            <div class="it-row">
+              <span class="it-time">9:30 AM</span>
+              <span class="it-activity">Pack up and tidy</span>
+              <span class="it-location">Sidney house</span>
+              <span class="it-notes">strip the beds, bins out</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">11:00 AM</span>
+              <span class="it-activity">Check out</span>
+              <span class="it-location"><a>Sidney <span class="link-tail">house<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">keys back in the lockbox</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">11:30 AM</span>
+              <span class="it-activity">Coffee + pastries</span>
+              <span class="it-location"><a>Sidney <span class="link-tail">Bakery<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~10min drive</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">1:00 PM–2:35 PM</span>
+              <span class="it-activity">Ferry home</span>
+              <span class="it-location"><a>Swartz Bay <span class="link-tail">Terminal<svg width="7" height="7" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.8"/></svg></span></a></span>
+              <span class="it-notes">~15min drive
+last sailing we all fit on</span>
+            </div>
+            <div class="it-row">
+              <span class="it-time">4:00 PM</span>
+              <span class="it-activity">Home</span>
+              <span class="it-location">Vancouver</span>
+              <span class="it-notes"></span>
+            </div>
+          </div></div>
+        </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /scroll -->
+
+<script src="trail.js"></script>
+<script>
+  // ── Accordion: each day opens and closes, and the paper grows and
+  //    shrinks with it (grid-template-rows 0fr <-> 1fr does the animating) ──
+  (function() {
+    var rowsEl = document.getElementById('rows');
+    var days = Array.prototype.slice.call(rowsEl.querySelectorAll('.day'));
+
+    function setDayClosed(day, closed) {
+      day.classList.toggle('closed', closed);
+      day.querySelector('.day-head').setAttribute('aria-expanded', String(!closed));
+      day.querySelector('.day-toggle').textContent = closed ? '+' : '\u2212';
+    }
+
+    days.forEach(function(day) {
+      day.querySelector('.day-head').addEventListener('click', function() {
+        var opening = day.classList.contains('closed');
+        setDayClosed(day, !opening);
+        // phones: opening a day closes the others — one open at a time
+        if (opening && window.matchMedia('(max-width: 600px)').matches) {
+          days.forEach(function(other) {
+            if (other !== day) setDayClosed(other, true);
+          });
+        }
+      });
+    });
+
+    var MONTHS = ['january','february','march','april','may','june','july',
+                  'august','september','october','november','december'];
+    function dateFromTitle(title) {
+      var m = title.toLowerCase().match(
+        /(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})/);
+      if (!m) return null;
+      return new Date(2026, MONTHS.indexOf(m[1]), parseInt(m[2], 10));
+    }
+
+    // Every day starts closed, then the day nearest today animates open —
+    // the paper visibly grows into place, same as the real site.
+    days.forEach(function(day) { setDayClosed(day, true); });
+    requestAnimationFrame(function() {
+      requestAnimationFrame(function() {
+        if (!days.length) return;
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var best = null, bestDist = Infinity;
+        days.forEach(function(day) {
+          var t = dateFromTitle(day.querySelector('.day-head span').textContent);
+          var dist = t ? Math.abs(t - today) : Infinity;
+          if (dist < bestDist) { bestDist = dist; best = day; }
+        });
+        setDayClosed(best || days[0], false);
+      });
+    });
+
+    // Demo build: nothing to re-sync, so the refresh chip just plays its
+    // spin — the page still feels alive when you press it.
+    var refreshBtn = document.getElementById('refreshBtn');
+    var refreshIcon = document.getElementById('refreshIcon');
+    refreshBtn.addEventListener('click', function() {
+      if (refreshIcon.classList.contains('spinning')) return; // one at a time
+      refreshIcon.classList.add('spinning');
+      setTimeout(function() { refreshIcon.classList.remove('spinning'); }, 900);
+    });
+  })();
+
+  // Entrance scroll handling: start at the top, lock scrolling during the slide
+  (function() {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var de = document.documentElement;
+    de.classList.add('entering');
+    var release = function() { de.classList.remove('entering'); };
+    document.querySelector('.sheet-enter')
+      .addEventListener('animationend', release, { once: true });
+    setTimeout(release, 3200);
+  })();
+
+  // (no 3D tilt on this page — the schedule stays flat for easy reading)
+</script>
+</body>
+</html>

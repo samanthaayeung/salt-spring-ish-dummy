@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salt Spring ish</title>
+<link rel="icon" type="image/png" href="island.png?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;700&family=Instrument+Sans:wght@600;700&display=swap" rel="stylesheet">
+<script>
+  // The photo fades in only on the first page of a visit — navigating
+  // between pages keeps it steady instead of blinking out and back
+  if (sessionStorage.getItem('ss-bg-seen')) document.documentElement.classList.add('bg-instant');
+  else sessionStorage.setItem('ss-bg-seen', '1');
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* hold the old page's pixels until the new page paints — no blank flash */
+  @view-transition { navigation: auto; }
+  html { background: #dddcd8; }
+
+  /* The page itself never scrolls — the .scroll container does. That keeps
+     the fixed photo perfectly still (no browser-chrome resize jank) while
+     only the receipt moves. */
+  html, body { height: 100%; }
+  body {
+    font-family: 'Geist Mono', 'Courier New', monospace;
+    overflow: hidden;
+  }
+  .scroll {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    display: flex;
+    padding: 2.5rem 1rem;
+    position: relative;
+  }
+
+  /* Photo background — a fixed layer behind everything (this approach also
+     behaves on phones, where fixed background images can glitch) */
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    /* lvh = full screen height even while the phone address bar is collapsing,
+       so the photo stays put during scroll (vh line is the older-browser fallback) */
+    height: 100vh;
+    height: 100lvh;
+    z-index: -1;
+    background: url('background.jpg') center / cover no-repeat;
+    /* entrance: the photo fades in first */
+    animation: bg-fade 0.5s ease-out both;
+  }
+  @keyframes bg-fade {
+    from { opacity: 0; }
+  }
+  html.bg-instant body::before { animation: none; }
+
+  /* Entrance: the receipt slides up from below the screen and glides to a
+     stop, decelerating like a receipt slid across a dinner table. Lives on
+     its own wrapper so it can't fight the cursor-tilt animation. */
+  .receipt-enter {
+    width: 100%;
+    max-width: 400px;
+    /* margin auto = centered both ways, but still scrolls safely on small screens */
+    margin: auto;
+    animation: receipt-slide 1.7s cubic-bezier(0.05, 0.7, 0.1, 1) 0.4s both;
+  }
+  @keyframes receipt-slide {
+    from { transform: translateY(105vh); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body::before, .receipt-enter { animation: none; }
+  }
+  /* While the receipt is sliding in, the page can't be scrolled — otherwise
+     the receipt hanging below the screen makes the page scrollable into
+     empty space, and you can end up stranded past the receipt when it lands */
+  html.entering .scroll {
+    overflow: hidden;
+  }
+
+  .receipt-wrap {
+    width: 100%;
+    position: relative;
+    /* children keep their own 3D angles (needed for the paper-bend effect) */
+    transform-style: preserve-3d;
+    will-change: transform;
+  }
+  /* Soft shadow cast around a transparent shape (box-shadow draws only
+     OUTSIDE the box), so nothing dark sits behind the see-through paper.
+     Being its own element, animating it never re-renders the text. */
+  .receipt-shadow {
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
+    transform: translate3d(0, 0, -40px); /* sits behind the paper in 3D */
+    will-change: transform;
+  }
+  .receipt-bend {
+    will-change: transform;
+  }
+
+  .receipt {
+    /* The scalloped torn ends are cut out of this one element with a mask
+       (top and bottom rows of semicircle bumps + the body in between), so
+       the translucent paper is a single seamless sheet. */
+    -webkit-mask-image:
+      linear-gradient(#000, #000),
+      radial-gradient(circle at 50% 100%, #000 7px, transparent 8px),
+      radial-gradient(circle at 50% 0%, #000 7px, transparent 8px);
+    -webkit-mask-size: 100% calc(100% - 24px), 18px 12px, 18px 12px;
+    -webkit-mask-position: 0 12px, 9px 0, 9px 100%;
+    -webkit-mask-repeat: no-repeat, repeat-x, repeat-x;
+    mask-image:
+      linear-gradient(#000, #000),
+      radial-gradient(circle at 50% 100%, #000 7px, transparent 8px),
+      radial-gradient(circle at 50% 0%, #000 7px, transparent 8px);
+    mask-size: 100% calc(100% - 24px), 18px 12px, 18px 12px;
+    mask-position: 0 12px, 9px 0, 9px 100%;
+    mask-repeat: no-repeat, repeat-x, repeat-x;
+    /* slightly see-through like thin receipt paper; the backdrop blur
+       frosts the photo behind it so text stays fully legible */
+    background: rgba(255, 255, 255, 0.88);
+    -webkit-backdrop-filter: blur(7px);
+    backdrop-filter: blur(7px);
+    padding: 12px 1.4rem; /* top/bottom 12px = the masked scallop zones */
+    position: relative;
+    overflow: hidden; /* keeps the moving sheen inside the paper */
+  }
+  /* Everything printed on the receipt is slightly faded, like thermal ink
+     (the sheen is excluded — it's light, not ink) */
+  .receipt > *:not(.receipt-sheen) {
+    opacity: 0.82;
+  }
+  /* Sheen — a soft light spot on the paper surface that follows the cursor,
+     like light catching glossy thermal receipt paper */
+  .receipt-sheen {
+    position: absolute;
+    left: -30%;
+    top: -30%;
+    width: 160%;
+    height: 160%;
+    background: radial-gradient(circle closest-side,
+      rgba(255, 255, 255, 0.3),
+      rgba(255, 255, 255, 0.08) 45%,
+      transparent 70%);
+    pointer-events: none;
+    z-index: 5;
+    will-change: transform, opacity;
+  }
+
+  /* ── Dashed rule ── */
+  .dash {
+    border: none;
+    border-top: 1px dashed #bbb;
+    margin: 1rem 0;
+  }
+
+  /* ── Header ── */
+  .r-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.2rem 0 0;
+  }
+  /* chips that open the source sheet / re-sync — same as the itinerary */
+  .sheet-actions {
+    display: inline-flex;
+    gap: 6px;
+  }
+  .sheet-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: white;
+    border: 1px dashed #bbb;
+    color: #111;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-decoration: none;
+    padding: 4px 8px;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .sheet-link-btn:hover {
+    background: #111;
+    color: #fff;
+  }
+  button.sheet-link-btn { font-family: inherit; }
+  /* the refresh arrow spins while a re-sync is in flight */
+  .spinning {
+    animation: refresh-spin 0.8s linear infinite;
+  }
+  @keyframes refresh-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ── Title ── */
+  .title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 0.5rem;
+  }
+  .title-left {
+    font-size: 19px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    text-transform: uppercase;
+    color: #000;
+  }
+  .sub-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #888;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-top: 3px;
+    margin-bottom: 1rem;
+  }
+
+  /* ── Chart ── */
+  .legend {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin: 6px 0 1.5rem;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 8px;
+    color: #777;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .legend-dot {
+    width: 7px;
+    height: 7px;
+    flex-shrink: 0;
+  }
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+    height: 52px;
+  }
+  /* Custom hover tooltip — floats above the bar, styled like the receipt */
+  .chart-tip {
+    position: absolute;
+    top: -4px;
+    transform: translate(-50%, -100%);
+    background: white;
+    border: 1px dashed #bbb;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #111;
+    padding: 4px 8px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s;
+    z-index: 2;
+  }
+
+  /* ── Stats grids ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+    margin-bottom: 0.75rem;
+  }
+  .stat-label {
+    font-size: 8px;
+    color: #888;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .stat-value {
+    font-size: 15px;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: -0.02em;
+  }
+  .stat-value.xl {
+    font-size: 19px;
+  }
+
+  /* ── Line items ── */
+  .section-head {
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+    font-weight: 500;
+    margin: 0.6rem 0 0.25rem;
+  }
+  .line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #333;
+    padding: 2px 0;
+    letter-spacing: 0.02em;
+  }
+  .line.indent { padding-left: 10px; }
+  .line.sub {
+    color: #999;
+    font-size: 11px;
+  }
+  .line.bold {
+    font-weight: 700;
+    color: #000;
+    font-size: 12.5px;
+  }
+
+  /* ── Totals ── */
+  .total-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: 0.02em;
+    padding: 2px 0;
+  }
+  .pp-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px; /* same size as Grand Total, regular weight */
+    color: #666;
+    padding: 2px 0;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Close button — foggy glass chip; scrolls away with the receipt ── */
+  .close-btn {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    z-index: 60;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.18);
+    -webkit-backdrop-filter: blur(9px);
+    backdrop-filter: blur(9px);
+    transform: translateZ(0); /* own layer from the start = no first-hover flicker */
+    color: #fff;
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  .close-btn:hover {
+    background: #fff;
+    color: #111;
+  }
+  /* wide screens: the receipt can't reach this corner, so the x pins to the
+     viewport and stays visible while the page scrolls */
+  @media (min-width: 900px) {
+    .close-btn { position: fixed; }
+  }
+
+  /* Phones: slimmer receipt so more of the photo shows, extra top padding
+     so the receipt clears the close button, and colour key in two tidy
+     columns instead of leaving an orphan */
+  @media (max-width: 480px) {
+    .scroll { padding: 4.5rem 2.2rem 2.5rem; }
+    /* key items pack as many per line as fit (tighter gap on phones) */
+    .legend { gap: 4px 10px; }
+  }
+
+  /* ── Bottom ornament line ── */
+  .footer-icons {
+    text-align: center;
+    font-size: 13px;
+    color: #111;
+    word-spacing: 10px;
+    padding: 0.1rem 0 1.1rem;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="scroll">
+
+<a class="close-btn" href="index.html" aria-label="Back to home"><svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="1.3"/></svg></a>
+
+<div class="receipt-enter">
+<div class="receipt-wrap">
+
+  <div class="receipt-shadow" aria-hidden="true"></div>
+
+  <div class="receipt-bend">
+
+  <div class="receipt">
+
+    <div class="receipt-sheen" aria-hidden="true"></div>
+
+    <!-- Header -->
+    <div class="r-header">
+      <img src="island.png?v=2" width="44" height="44" alt="" aria-hidden="true">
+      <span class="sheet-actions">
+        <!-- Demo build: the chip keeps the look of a link out to the source
+             sheet, but deliberately has no href — nothing to open -->
+        <a class="sheet-link-btn" id="sheetBtn" role="link" aria-disabled="true">google sheet
+          <svg width="9" height="9" viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M4 1h7v7M11 1L1 11" stroke="currentColor" stroke-width="1.6"/></svg>
+        </a>
+        <button class="sheet-link-btn" id="refreshBtn" type="button" aria-label="Refresh from the sheet">
+          <svg id="refreshIcon" width="12" height="12" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z"/></svg>
+        </button>
+      </span>
+    </div>
+
+    <hr class="dash">
+
+    <!-- Title -->
+    <div class="title-row">
+      <div class="title-left">Salt Spring ish</div>
+    </div>
+    <div class="sub-row">
+      <span>Sep 18–20, 2026</span>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <canvas id="tripChart"></canvas>
+    </div>
+    <div class="legend" id="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#111;"></span>Accommodation</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#555;"></span>Victoria Ferry</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#999;"></span>Salt Spring Ferry</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#ccc;"></span>Activities</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#777;"></span>Other</span>
+    </div>
+
+    <!-- Stats row 1 -->
+    <div class="stats-grid">
+      <div>
+        <div class="stat-label">Total Cost</div>
+        <div class="stat-value xl" id="statTotal">$2,929</div>
+      </div>
+      <div>
+        <div class="stat-label">Per Person</div>
+        <div class="stat-value xl" id="statPerPerson">$325</div>
+      </div>
+      <div>
+        <div class="stat-label">Guests</div>
+        <div class="stat-value xl" id="statGuests">9</div>
+      </div>
+    </div>
+
+    <hr class="dash">
+
+    <!-- Line items — demo build: every figure below is invented and typed
+         straight into the page. Nothing here is fetched from anywhere. The
+         same numbers appear in the stat tiles above and the chart script
+         at the bottom of this file — change one, change all three. -->
+    <div id="lineItems">
+    <div class="section-head">Accommodation</div>
+    <div class="line">
+      <span>Sidney — 2 nights</span>
+      <span>$1,120.00</span>
+    </div>
+
+    <div class="section-head">Victoria Ferry</div>
+    <div class="line">
+      <span>Car 1 — 5 people, return</span>
+      <span>$391.85</span>
+    </div>
+    <div class="line">
+      <span>Car 2 — 4 people, return</span>
+      <span>$347.60</span>
+    </div>
+    <div class="line indent sub bold">
+      <span>Subtotal</span>
+      <span>$739.45</span>
+    </div>
+
+    <div class="section-head">Salt Spring Ferry</div>
+    <div class="line">
+      <span>Car 1 — 5 people, return</span>
+      <span>$104.25</span>
+    </div>
+    <div class="line">
+      <span>Car 2 — 4 people, return</span>
+      <span>$88.70</span>
+    </div>
+    <div class="line indent sub bold">
+      <span>Subtotal</span>
+      <span>$192.95</span>
+    </div>
+
+    <div class="section-head">Activities</div>
+    <div class="line">
+      <span>Kayak Tour — 9 people</span>
+      <span>$876.96</span>
+    </div>
+
+    <div class="section-head">Other</div>
+    <div class="line">
+      <span>Gas + Electricity</span>
+      <span></span>
+    </div>
+    <div class="line">
+      <span>Food</span>
+      <span></span>
+    </div>
+    <div class="line">
+      <span>Parking</span>
+      <span></span>
+    </div>
+    <div class="line indent sub bold">
+      <span>Subtotal</span>
+      <span>$0.00</span>
+    </div>
+    </div><!-- /lineItems -->
+
+    <hr class="dash">
+
+    <div class="total-line">
+      <span>Grand Total</span>
+      <span id="grandTotal">$2,929.36</span>
+    </div>
+    <div class="pp-line">
+      <span>Per Person</span>
+      <span id="perPerson">$325.48</span>
+    </div>
+
+    <hr class="dash">
+
+    <div class="footer-icons">&#x2248;&#xFE0E; &#x273B;&#xFE0E; &#x263C;&#xFE0E; &#x2740;&#xFE0E; &#x263E;&#xFE0E; &#x2736;&#xFE0E; &#x274B;&#xFE0E; &#x2248;&#xFE0E;</div>
+
+  </div><!-- /receipt -->
+
+  </div><!-- /receipt-bend -->
+
+</div><!-- /receipt-wrap -->
+</div><!-- /receipt-enter -->
+
+</div><!-- /scroll -->
+
+<script>
+  (function() {
+    const canvas = document.getElementById('tripChart');
+
+    // Tooltip element that floats above the chart instead of covering it
+    const wrap = canvas.parentElement;
+    const tip = document.createElement('div');
+    tip.className = 'chart-tip';
+    wrap.appendChild(tip);
+
+    // Entrance: the chart is built immediately (building it later, while the
+    // receipt is still off-screen, breaks its sizing) but its grow-in
+    // animation is delayed so the bars fill while the receipt slides up.
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // Demo build: the bar's numbers are typed in here and must match the
+    // section subtotals printed on the receipt above
+    window.tripChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: [''],
+        datasets: [
+          { label: 'Accommodation',      data: [1120],   backgroundColor: '#111111', hoverBackgroundColor: '#454545' },
+          { label: 'Victoria Ferry',     data: [739.45], backgroundColor: '#555555', hoverBackgroundColor: '#7a7a7a' },
+          { label: 'Salt Spring Ferry',  data: [192.95], backgroundColor: '#999999', hoverBackgroundColor: '#b3b3b3' },
+          { label: 'Activities',         data: [876.96], backgroundColor: '#cccccc', hoverBackgroundColor: '#e0e0e0' },
+          { label: 'Other',              data: [0],      backgroundColor: '#777777', hoverBackgroundColor: '#909090' }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: reducedMotion ? false : {
+          duration: 900,
+          easing: 'easeOutQuart',
+          // delay only the initial grow-in (so bars fill during the receipt's
+          // slide) — hover highlights must react instantly
+          delay: (c) => (c.type === 'data' && c.mode === 'default') ? 450 : 0
+        },
+        // only the segment directly under the cursor triggers the tooltip
+        interaction: { mode: 'nearest', intersect: true },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: false, // built-in tooltip off; we position our own above the bar
+            external: (context) => {
+              // wait until the paper has settled flat — while it's still moving,
+              // segments drift under the cursor and the tooltip would flicker
+              if (window.paperState && !window.paperState.flat) { tip.style.opacity = 0; return; }
+              const t = context.tooltip;
+              if (!t || t.opacity === 0) { tip.style.opacity = 0; return; }
+              const dp = t.dataPoints && t.dataPoints[0];
+              if (dp) {
+                tip.textContent = dp.dataset.label + ': $' + dp.parsed.x.toFixed(2);
+                // centre over the hovered segment (base = segment start, x = segment end),
+                // then nudge inward if it would poke past the receipt's sides
+                const seg = dp.element;
+                const centre = (seg.base + seg.x) / 2;
+                const half = (tip.offsetWidth / 2) || 60;
+                tip.style.left = Math.max(half, Math.min(wrap.clientWidth - half, centre)) + 'px';
+              }
+              tip.style.opacity = 1;
+            }
+          }
+        },
+        scales: {
+          x: { stacked: true, display: false, min: 0, max: 2929.36 }, // max = grand total so the bar spans the full width
+          y: { stacked: true, display: false }
+        }
+      }
+    });
+  })();
+</script>
+
+<script>
+  // ── Demo build: no live data ──
+  // On the real site this is where the receipt re-printed itself from a
+  // Google Sheet. Here the receipt is simply what's typed into the HTML
+  // above, and the refresh chip just plays its spin so the page still
+  // feels alive.
+  (function() {
+    var refreshBtn = document.getElementById('refreshBtn');
+    var refreshIcon = document.getElementById('refreshIcon');
+    refreshBtn.addEventListener('click', function() {
+      if (refreshIcon.classList.contains('spinning')) return; // one at a time
+      refreshIcon.classList.add('spinning');
+      setTimeout(function() { refreshIcon.classList.remove('spinning'); }, 900);
+    });
+  })();
+</script>
+
+<script src="trail.js"></script>
+<script>
+  // Entrance scroll handling: always start at the top (so the receipt lands
+  // exactly at scroll position zero) and lock scrolling until the slide ends.
+  (function() {
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; // no slide = no lock
+    const de = document.documentElement;
+    de.classList.add('entering');
+    const release = () => de.classList.remove('entering');
+    document.querySelector('.receipt-enter')
+      .addEventListener('animationend', release, { once: true });
+    setTimeout(release, 3200); // safety net in case the animation event never fires
+  })();
+
+  // 3D tilt — the receipt leans to face the cursor. A soft spring gives it a
+  // gentle paper wobble, the sheet bends a beat behind the base in 3D, and
+  // the shadow swings the opposite way as if the cursor were a light.
+  (function() {
+    // shared with the chart tooltip: it only shows once the paper is flat & still
+    window.paperState = { flat: true };
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!window.matchMedia('(pointer: fine)').matches) return; // no cursor on touch screens
+    const wrap = document.querySelector('.receipt-wrap');
+    const bend = document.querySelector('.receipt-bend');
+    const shadow = document.querySelector('.receipt-shadow');
+    const sheen = document.querySelector('.receipt-sheen');
+    const MAX_TILT = 2;      // degrees at the screen edge — half the old lean, so buttons stay easy to hit
+    const SHADOW_SWING = 12; // px of shadow offset at the screen edge
+    const BEND = 1.2;        // how much the sheet flexes while moving
+
+    let targetX = 0, targetY = 0;
+    let x = 0, y = 0, velX = 0, velY = 0; // spring state (the wobble)
+    let lagX = 0, lagY = 0;               // the paper's slower "bend" layer
+
+    // While hovering the bar chart the paper eases flat — a tilted surface
+    // throws off the chart's hover hit-testing, and flat paper reads better
+    // for pointing at segments anyway.
+    let holdFlat = false;
+    const chartWrap = document.querySelector('.chart-wrap');
+    chartWrap.addEventListener('mouseenter', () => { holdFlat = true; });
+    chartWrap.addEventListener('mouseleave', () => { holdFlat = false; });
+
+    let lastMouseX = 0, lastMouseY = 0;
+    window.addEventListener('mousemove', (e) => {
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      const r = wrap.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      // -1..1 = how far the cursor is from the receipt centre, relative to screen size
+      targetX = Math.max(-1, Math.min(1, (e.clientX - cx) / (window.innerWidth / 2)));
+      targetY = Math.max(-1, Math.min(1, (e.clientY - cy) / (window.innerHeight / 2)));
+    });
+
+    function tick() {
+      if (holdFlat) {
+        // lay flat quickly and without wobble, so the chart is a stable target
+        x += (0 - x) * 0.3; velX = 0;
+        y += (0 - y) * 0.3; velY = 0;
+      } else {
+        // soft spring, damped enough that the wobble is a murmur, not a bounce
+        velX += (targetX - x) * 0.028; velX *= 0.85; x += velX;
+        velY += (targetY - y) * 0.028; velY *= 0.85; y += velY;
+      }
+      const wasFlat = window.paperState.flat;
+      window.paperState.flat = !holdFlat ||
+        (Math.abs(x) < 0.02 && Math.abs(y) < 0.02);
+      // the paper just settled flat under a still cursor — re-trigger the
+      // hover so the chart tooltip appears without needing another mouse move
+      if (holdFlat && window.paperState.flat && !wasFlat) {
+        document.getElementById('tripChart').dispatchEvent(
+          new MouseEvent('mousemove', {clientX: lastMouseX, clientY: lastMouseY, bubbles: true}));
+      }
+      // the bend layer chases the base tilt; the gap between them is the flex
+      lagX += (x - lagX) * 0.12;
+      lagY += (y - lagY) * 0.12;
+
+      wrap.style.transform =
+        'perspective(900px)' +
+        ' rotateX(' + (-y * MAX_TILT).toFixed(2) + 'deg)' +
+        ' rotateY(' + (x * MAX_TILT).toFixed(2) + 'deg)';
+      bend.style.transform =
+        'rotateX(' + (-(y - lagY) * MAX_TILT * BEND).toFixed(2) + 'deg)' +
+        ' rotateY(' + ((x - lagX) * MAX_TILT * BEND).toFixed(2) + 'deg)';
+      shadow.style.transform =
+        'translate3d(' + (-x * SHADOW_SWING).toFixed(1) + 'px, ' +
+        (12 - y * SHADOW_SWING).toFixed(1) + 'px, -40px)';
+      // the light spot slides toward the cursor and brightens
+      // as the light gets more head-on
+      sheen.style.transform =
+        'translate3d(' + (x * wrap.clientWidth * 0.5).toFixed(1) + 'px, ' +
+        (y * wrap.clientHeight * 0.5).toFixed(1) + 'px, 0)';
+      sheen.style.opacity = (0.5 - 0.28 * Math.min(1, Math.hypot(x, y))).toFixed(2);
+      requestAnimationFrame(tick);
+    }
+
+    // hold the tilt until the receipt has finished sliding in
+    let tiltStarted = false;
+    const startTilt = () => { if (!tiltStarted) { tiltStarted = true; tick(); } };
+    document.querySelector('.receipt-enter')
+      .addEventListener('animationend', startTilt, { once: true });
+    setTimeout(startTilt, 3200); // safety net in case the animation event never fires
+  })();
+</script>
+
+</body>
+</html>

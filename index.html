@@ -5,652 +5,289 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Salt Spring ish</title>
 <link rel="icon" type="image/png" href="island.png?v=2">
-<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@500;600;700&family=Geist+Mono:wght@400&display=swap" rel="stylesheet">
+<script>
+  // The photo fades in only on the first page of a visit — navigating
+  // between pages keeps it steady instead of blinking out and back
+  if (sessionStorage.getItem('ss-bg-seen')) document.documentElement.classList.add('bg-instant');
+  else sessionStorage.setItem('ss-bg-seen', '1');
+</script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
+  /* hold the old page's pixels until the new page paints — no blank flash */
+  @view-transition { navigation: auto; }
+  html { background: #dddcd8; }
+
   body {
-    font-family: 'Geist Mono', 'Courier New', monospace;
-    background: #dddcd8;
+    font-family: 'Instrument Sans', sans-serif;
     min-height: 100vh;
-    display: flex;
-    padding: 2.5rem 1rem;
+    overflow: hidden;
   }
 
-  /* Photo background — a fixed layer behind everything (this approach also
-     behaves on phones, where fixed background images can glitch) */
+  /* Same halftone photo backdrop as the costs page, fading in first */
   body::before {
     content: '';
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
-    /* lvh = full screen height even while the phone address bar is collapsing,
-       so the photo stays put during scroll (vh line is the older-browser fallback) */
     height: 100vh;
     height: 100lvh;
     z-index: -1;
     background: url('background.jpg') center / cover no-repeat;
-    /* entrance: the photo fades in first */
     animation: bg-fade 0.5s ease-out both;
   }
   @keyframes bg-fade {
     from { opacity: 0; }
   }
+  html.bg-instant body::before { animation: none; }
 
-  /* Entrance: the receipt slides up from below the screen and glides to a
-     stop, decelerating like a receipt slid across a dinner table. Lives on
-     its own wrapper so it can't fight the cursor-tilt animation. */
-  .receipt-enter {
-    width: 100%;
-    max-width: 400px;
-    /* margin auto = centered both ways, but still scrolls safely on small screens */
-    margin: auto;
-    animation: receipt-slide 1.7s cubic-bezier(0.05, 0.7, 0.1, 1) 0.4s both;
+  /* ── Centre: title + countdown ── */
+  .hero {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #fff;
   }
-  @keyframes receipt-slide {
-    from { transform: translateY(105vh); }
+  .title {
+    font-size: clamp(64px, 13vw, 170px);
+    font-weight: 500; /* Instrument Sans Medium */
+    line-height: 0.8;
+    letter-spacing: -0.08em;
   }
-  @media (prefers-reduced-motion: reduce) {
-    body::before, .receipt-enter { animation: none; }
-  }
-  /* While the receipt is sliding in, the page can't be scrolled — otherwise
-     the receipt hanging below the screen makes the page scrollable into
-     empty space, and you can end up stranded past the receipt when it lands */
-  html.entering, html.entering body {
-    overflow: hidden;
-  }
-
-  .receipt-wrap {
-    width: 100%;
+  /* each text size gets its own noise strength (filters in <body>) */
+  /* the same soft halo the nav labels carry, at half strength — added
+     after the noise so the grain doesn't chew up the shadow. Blur is in
+     em so it scales with the title instead of vanishing at large sizes */
+  .title .word { filter: url(#noise-lg) drop-shadow(0 0 0.10em rgba(0, 0, 0, 0.20)); }
+  /* the SPRING line centres on SPRING alone — (ish) hangs off the end
+     absolutely, taking up no layout width */
+  .title .line2 {
     position: relative;
-    /* children keep their own 3D angles (needed for the paper-bend effect) */
-    transform-style: preserve-3d;
-    will-change: transform;
+    display: inline-block;
   }
-  /* Soft shadow cast around a transparent shape (box-shadow draws only
-     OUTSIDE the box), so nothing dark sits behind the see-through paper.
-     Being its own element, animating it never re-renders the text. */
-  .receipt-shadow {
+  .title .ish {
+    /* "(ish)" rides high off the end of SPRING, like the mock */
+    position: absolute;
+    left: 100%;
+    top: 0.14em;
+    margin-left: 0.18em; /* breathing room off the end of SPRING */
+    font-size: 0.36em;
+    font-weight: 500;
+    letter-spacing: -0.08em; /* re-declared so it computes against (ish)'s own size */
+    filter: url(#noise-md) drop-shadow(0 0 0.10em rgba(0, 0, 0, 0.20));
+  }
+  .countdown {
+    margin-top: 30px;
+    font-family: 'Geist Mono', 'Courier New', monospace;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    filter: url(#noise-sm);
+  }
+
+  /* ── Corner nav items — grey squares stand in for the images for now ── */
+  .nav-item {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    text-shadow: 0 0 7.3px rgba(0, 0, 0, 0.80);
+  }
+  .thumb {
+    /* images keep their own aspect ratio at the old square's height */
+    height: 120px;
+    width: auto;
+    display: block;
+  }
+  /* "coming soon" overlay for pages that don't exist yet */
+  .thumb-wrap { position: relative; }
+  .coming-soon {
     position: absolute;
     inset: 0;
-    border-radius: 12px;
-    box-shadow: 0 14px 28px rgba(0, 0, 0, 0.35);
-    transform: translate3d(0, 0, -40px); /* sits behind the paper in 3D */
-    will-change: transform;
-  }
-  .receipt-bend {
-    will-change: transform;
-  }
-
-  .receipt {
-    /* The scalloped torn ends are cut out of this one element with a mask
-       (top and bottom rows of semicircle bumps + the body in between), so
-       the translucent paper is a single seamless sheet. */
-    -webkit-mask-image:
-      linear-gradient(#000, #000),
-      radial-gradient(circle at 50% 100%, #000 7px, transparent 8px),
-      radial-gradient(circle at 50% 0%, #000 7px, transparent 8px);
-    -webkit-mask-size: 100% calc(100% - 24px), 18px 12px, 18px 12px;
-    -webkit-mask-position: 0 12px, 9px 0, 9px 100%;
-    -webkit-mask-repeat: no-repeat, repeat-x, repeat-x;
-    mask-image:
-      linear-gradient(#000, #000),
-      radial-gradient(circle at 50% 100%, #000 7px, transparent 8px),
-      radial-gradient(circle at 50% 0%, #000 7px, transparent 8px);
-    mask-size: 100% calc(100% - 24px), 18px 12px, 18px 12px;
-    mask-position: 0 12px, 9px 0, 9px 100%;
-    mask-repeat: no-repeat, repeat-x, repeat-x;
-    /* slightly see-through like thin receipt paper; the backdrop blur
-       frosts the photo behind it so text stays fully legible */
-    background: rgba(255, 255, 255, 0.88);
-    -webkit-backdrop-filter: blur(7px);
-    backdrop-filter: blur(7px);
-    padding: 12px 1.4rem; /* top/bottom 12px = the masked scallop zones */
-    position: relative;
-    overflow: hidden; /* keeps the moving sheen inside the paper */
-  }
-  /* Everything printed on the receipt is slightly faded, like thermal ink
-     (the sheen is excluded — it's light, not ink) */
-  .receipt > *:not(.receipt-sheen) {
-    opacity: 0.82;
-  }
-  /* Sheen — a soft light spot on the paper surface that follows the cursor,
-     like light catching glossy thermal receipt paper */
-  .receipt-sheen {
-    position: absolute;
-    left: -30%;
-    top: -30%;
-    width: 160%;
-    height: 160%;
-    background: radial-gradient(circle closest-side,
-      rgba(255, 255, 255, 0.3),
-      rgba(255, 255, 255, 0.08) 45%,
-      transparent 70%);
-    pointer-events: none;
-    z-index: 5;
-    will-change: transform, opacity;
-  }
-
-  /* ── Dashed rule ── */
-  .dash {
-    border: none;
-    border-top: 1px dashed #bbb;
-    margin: 1rem 0;
-  }
-
-  /* ── Header ── */
-  .r-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 1.2rem 0 0;
-  }
-  .r-header-label {
-    font-size: 12px;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    color: #999;
-  }
-
-  /* ── Title ── */
-  .title-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    margin-top: 0.5rem;
-  }
-  .sub-row {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #888;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    margin-top: 3px;
-    margin-bottom: 1rem;
-  }
-  .title-left {
-    font-size: 19px;
-    font-weight: 700;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-    text-transform: uppercase;
-    color: #000;
-  }
-
-  /* ── Chart ── */
-  .legend {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    margin: 6px 0 1.5rem;
-  }
-  .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 8px;
-    color: #777;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
-  .legend-dot {
-    width: 7px;
-    height: 7px;
-    flex-shrink: 0;
-  }
-  .chart-wrap {
-    position: relative;
-    width: 100%;
-    height: 52px;
-  }
-  /* Custom hover tooltip — floats above the bar, styled like the receipt */
-  .chart-tip {
-    position: absolute;
-    top: -4px;
-    transform: translate(-50%, -100%);
-    background: white;
-    border: 1px dashed #bbb;
-    font-size: 9px;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: #111;
-    padding: 4px 8px;
-    white-space: nowrap;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.12s;
-    z-index: 2;
-  }
-
-  /* ── Stats grids ── */
-  .stats-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.4rem;
-    margin-bottom: 0.75rem;
-  }
-  .stat-label {
-    font-size: 8px;
-    color: #888;
-    letter-spacing: 0.09em;
-    text-transform: uppercase;
-    margin-bottom: 2px;
-  }
-  .stat-value {
-    font-size: 15px;
-    font-weight: 700;
-    color: #000;
+    place-items: center;
+    font-family: 'Geist Mono', 'Courier New', monospace;
+    font-size: 14px; /* optically matches the label size in the mono face */
+    font-weight: 400;
     letter-spacing: -0.02em;
+    white-space: nowrap;
   }
-  .stat-value.xl {
-    font-size: 19px;
-  }
+  .nav-itinerary { left: 9%;  top: 26%; }
+  .nav-stay      { right: 9%; top: 10%; }
+  .nav-bookings  { left: 11%; bottom: 9%; }
+  .nav-costs     { right: 9%; bottom: 10%; }
 
-  /* ── Line items ── */
-  .section-head {
-    font-size: 9px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: #888;
-    font-weight: 500;
-    margin: 0.6rem 0 0.25rem;
-  }
-  .line {
-    display: flex;
-    justify-content: space-between;
-    font-size: 12px;
-    color: #333;
-    padding: 2px 0;
-    letter-spacing: 0.02em;
-  }
-  .line.indent { padding-left: 10px; }
-  .line.sub {
-    color: #999;
-    font-size: 11px;
-  }
-  .line.bold {
-    font-weight: 700;
-    color: #000;
-    font-size: 12.5px;
-  }
+  /* costs is the only live link so far */
+  a.nav-item .thumb { transition: transform 0.18s ease; }
+  a.nav-item:hover .thumb { transform: scale(1.05); }
 
-  /* ── Totals ── */
-  .total-line {
-    display: flex;
-    justify-content: space-between;
-    font-size: 13px;
-    font-weight: 700;
-    color: #000;
-    letter-spacing: 0.02em;
-    padding: 2px 0;
-  }
-  .pp-line {
-    display: flex;
-    justify-content: space-between;
-    font-size: 13px; /* same size as Grand Total, regular weight */
-    color: #666;
-    padding: 2px 0;
-    letter-spacing: 0.03em;
-  }
+  /* desktop: the grid wrapper doesn't exist visually — corners stay scattered */
+  .nav-grid { display: contents; }
 
-  /* Cursor trail — the receipt's ornament glyphs follow the mouse.
-     mix-blend-mode: difference flips them dark on paper, light on the photo */
-  .trail-glyph {
-    position: fixed;
-    z-index: 50;
-    font-size: 14px;
-    color: #fff;
-    mix-blend-mode: difference;
-    pointer-events: none;
-    transform: translate(-50%, -50%);
-    animation: trail-fade 0.7s ease-out forwards;
-  }
-  @keyframes trail-fade {
-    to { opacity: 0; }
-  }
-
-  /* Phones: slimmer receipt so more of the photo shows,
-     and colour key in two tidy columns instead of leaving an orphan */
-  @media (max-width: 480px) {
-    body { padding: 2rem 2.2rem; }
-    .legend {
-      display: grid;
-      grid-template-columns: repeat(2, auto);
-      justify-content: start;
-      gap: 4px 12px;
+  /* ── Mobile: title + countdown at the top, squares in a 2×2 grid below ── */
+  @media (max-width: 600px) {
+    body {
+      /* the page fits one screen — no scrolling. svh = the viewport at its
+         smallest (browser bars showing) so the countdown is never hidden */
+      height: 100svh;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 3rem 0 2.5rem;
     }
+    /* the hero dissolves so title / grid / countdown stack as siblings:
+       title on top, 2x2 grid, countdown at the bottom */
+    .hero { display: contents; }
+    .title {
+      padding: 0 1rem;
+      text-align: center;
+    }
+    .nav-grid {
+      order: 1;
+      /* the grid takes all the space between title and countdown and
+         centres its two rows vertically inside it */
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      justify-items: center;
+      align-content: center;
+      /* row gap in vw so vertical spacing grows with screen width at the
+         same rate the 1fr columns spread the items horizontally */
+      gap: 6vw 1rem;
+      padding: 0 2.4rem;
+    }
+    .nav-item { position: static; }
+    .thumb { height: 96px; }
+    .countdown {
+      order: 2;
+      font-size: 14px;
+      filter: url(#noise-xs);
+      text-align: center;
+      margin: 0;
+    }
+    /* smaller text on phones = gentler noise, or the letters get chewed up */
+    .title .word { filter: url(#noise-md) drop-shadow(0 0 0.10em rgba(0, 0, 0, 0.20)); }
+    .title .ish { filter: url(#noise-sm) drop-shadow(0 0 0.10em rgba(0, 0, 0, 0.20)); }
   }
-
-  /* ── Bottom ornament line ── */
-  .footer-icons {
-    text-align: center;
-    font-size: 13px;
-    color: #111;
-    word-spacing: 10px;
-    padding: 0.1rem 0 1.1rem;
-  }
-
 </style>
 </head>
 <body>
-<div class="receipt-enter">
-<div class="receipt-wrap">
 
-  <div class="receipt-shadow" aria-hidden="true"></div>
+<!-- Noise filters (from the Figma export, speckle-grain layer removed):
+     coarse noise displaces the letterforms so the edges go rough and printy.
+     Three strengths — the smaller the text, the gentler the displacement. -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <defs>
+    <!-- big title: speckle grain inside the letters + rough displaced edges -->
+    <filter id="noise-lg" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="1.6666666" stitchTiles="stitch" numOctaves="3" seed="3307" result="noise"/>
+      <feColorMatrix in="noise" type="luminanceToAlpha" result="alphaNoise"/>
+      <feComponentTransfer in="alphaNoise" result="coloredNoise1">
+        <feFuncA type="discrete" tableValues="1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/>
+      </feComponentTransfer>
+      <feComposite operator="in" in="coloredNoise1" in2="SourceGraphic" result="noise1Clipped"/>
+      <feFlood flood-color="rgba(0, 0, 0, 0.08)" result="color1Flood"/>
+      <feComposite operator="in" in="color1Flood" in2="noise1Clipped" result="color1"/>
+      <feMerge result="textured">
+        <feMergeNode in="SourceGraphic"/>
+        <feMergeNode in="color1"/>
+      </feMerge>
+      <feTurbulence type="fractalNoise" baseFrequency="0.999" numOctaves="3" seed="4728"/>
+      <feDisplacementMap in="textured" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <!-- medium: finer speckle grain + gentler displaced edges, for (ish) -->
+    <filter id="noise-md" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="2.4" stitchTiles="stitch" numOctaves="3" seed="3307" result="noise"/>
+      <feColorMatrix in="noise" type="luminanceToAlpha" result="alphaNoise"/>
+      <feComponentTransfer in="alphaNoise" result="coloredNoise1">
+        <feFuncA type="discrete" tableValues="1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"/>
+      </feComponentTransfer>
+      <feComposite operator="in" in="coloredNoise1" in2="SourceGraphic" result="noise1Clipped"/>
+      <feFlood flood-color="rgba(0, 0, 0, 0.06)" result="color1Flood"/>
+      <feComposite operator="in" in="color1Flood" in2="noise1Clipped" result="color1"/>
+      <feMerge result="textured">
+        <feMergeNode in="SourceGraphic"/>
+        <feMergeNode in="color1"/>
+      </feMerge>
+      <feTurbulence type="fractalNoise" baseFrequency="0.999" numOctaves="3" seed="4728"/>
+      <feDisplacementMap in="textured" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="noise-sm" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.999" numOctaves="3" seed="4728"/>
+      <feDisplacementMap in="SourceGraphic" scale="2" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <filter id="noise-xs" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.999" numOctaves="3" seed="4728"/>
+      <feDisplacementMap in="SourceGraphic" scale="1.2" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+  </defs>
+</svg>
 
-  <div class="receipt-bend">
+<div class="hero">
+  <h1 class="title"><span class="word">SALT</span><br><span class="line2"><span class="word">SPRING</span><span class="ish">(ish)</span></span></h1>
+  <div class="countdown" id="countdown">00 days 00 hours 00 minutes</div>
+</div>
 
-  <div class="receipt">
+<div class="nav-grid">
+<a class="nav-item nav-itinerary" href="itinerary.html">
+  <img class="thumb" src="itinerary.png" alt="">
+  <span>itinerary</span>
+</a>
 
-    <div class="receipt-sheen" aria-hidden="true"></div>
+<a class="nav-item nav-stay" href="stay.html">
+  <img class="thumb" src="stay.png" alt="">
+  <span>stay</span>
+</a>
 
-    <!-- Header -->
-    <div class="r-header">
-      <img src="island.png?v=2" width="44" height="44" alt="" aria-hidden="true">
-      <span class="r-header-label">Cost So Far</span>
-    </div>
+<div class="nav-item nav-bookings">
+  <div class="thumb-wrap">
+    <img class="thumb" src="bookings.png" alt="">
+    <span class="coming-soon">coming soon</span>
+  </div>
+  <span>bookings</span>
+</div>
 
-    <hr class="dash">
+<a class="nav-item nav-costs" href="costs.html">
+  <img class="thumb" src="costs-thumb.png" alt="">
+  <span>costs</span>
+</a>
+</div><!-- /nav-grid -->
 
-    <!-- Title -->
-    <div class="title-row">
-      <div class="title-left">Salt Spring ish</div>
-    </div>
-    <div class="sub-row">
-      <span>Jul 10–12, 2026</span>
-    </div>
-
-    <!-- Chart -->
-    <div class="chart-wrap">
-      <canvas id="tripChart"></canvas>
-    </div>
-    <div class="legend">
-      <span class="legend-item"><span class="legend-dot" style="background:#111;"></span>Accommodation</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#555;"></span>Victoria Ferry</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#999;"></span>Salt Spring Ferry</span>
-      <span class="legend-item"><span class="legend-dot" style="background:#ccc;"></span>Activities</span>
-    </div>
-
-    <!-- Stats row 1 -->
-    <div class="stats-grid">
-      <div>
-        <div class="stat-label">Total Cost</div>
-        <div class="stat-value xl">$3,094</div>
-      </div>
-      <div>
-        <div class="stat-label">Per Person</div>
-        <div class="stat-value xl">$309</div>
-      </div>
-      <div>
-        <div class="stat-label">Guests</div>
-        <div class="stat-value xl">10</div>
-      </div>
-    </div>
-
-    <hr class="dash">
-
-    <!-- Line items -->
-    <div class="section-head">Accommodation</div>
-    <div class="line">
-      <span>2 nights</span>
-      <span>$1,240.00</span>
-    </div>
-
-    <div class="section-head">Victoria Ferry</div>
-    <div class="line">
-      <span>Car 1 — 5 people, return</span>
-      <span>$377.90</span>
-    </div>
-    <div class="line">
-      <span>Car 2 — 5 people, return</span>
-      <span>$362.45</span>
-    </div>
-    <div class="line indent sub bold">
-      <span>Subtotal</span>
-      <span>$740.35</span>
-    </div>
-
-    <div class="section-head">Salt Spring Ferry</div>
-    <div class="line">
-      <span>Car 1 — 5 people, return</span>
-      <span>$96.30</span>
-    </div>
-    <div class="line">
-      <span>Car 2 — 5 people, return</span>
-      <span>$91.85</span>
-    </div>
-    <div class="line indent sub bold">
-      <span>Subtotal</span>
-      <span>$188.15</span>
-    </div>
-
-    <div class="section-head">Activities</div>
-    <div class="line">
-      <span>Kayak Tour — 10 people</span>
-      <span>$925.00</span>
-    </div>
-
-    <hr class="dash">
-
-    <div class="total-line">
-      <span>Grand Total</span>
-      <span>$3,093.50</span>
-    </div>
-    <div class="pp-line">
-      <span>Per Person</span>
-      <span>$309.35</span>
-    </div>
-
-    <hr class="dash">
-
-    <div class="footer-icons">&#x2248;&#xFE0E; &#x273B;&#xFE0E; &#x263C;&#xFE0E; &#x2740;&#xFE0E; &#x263E;&#xFE0E; &#x2736;&#xFE0E; &#x274B;&#xFE0E; &#x2248;&#xFE0E;</div>
-
-  </div><!-- /receipt -->
-
-  </div><!-- /receipt-bend -->
-
-</div><!-- /receipt-wrap -->
-</div><!-- /receipt-enter -->
-
+<script src="trail.js"></script>
 <script>
+  // Live countdown to the trip: Sep 18, 2026 (local time).
+  // Demo build — this date is made up, and it's the one every other page
+  // (receipt sub-line, itinerary day headings) is written against.
   (function() {
-    const canvas = document.getElementById('tripChart');
-
-    // Tooltip element that floats above the chart instead of covering it
-    const wrap = canvas.parentElement;
-    const tip = document.createElement('div');
-    tip.className = 'chart-tip';
-    wrap.appendChild(tip);
-
-    // Entrance: the chart is built immediately (building it later, while the
-    // receipt is still off-screen, breaks its sizing) but its grow-in
-    // animation is delayed so the bars fill while the receipt slides up.
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    new Chart(canvas, {
-      type: 'bar',
-      data: {
-        labels: [''],
-        datasets: [
-          { label: 'Accommodation',      data: [1240],   backgroundColor: '#111111', hoverBackgroundColor: '#454545' },
-          { label: 'Victoria Ferry',     data: [740.35], backgroundColor: '#555555', hoverBackgroundColor: '#7a7a7a' },
-          { label: 'Salt Spring Ferry',  data: [188.15], backgroundColor: '#999999', hoverBackgroundColor: '#b3b3b3' },
-          { label: 'Activities',         data: [925],    backgroundColor: '#cccccc', hoverBackgroundColor: '#e0e0e0' }
-        ]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: reducedMotion ? false : {
-          duration: 900,
-          easing: 'easeOutQuart',
-          // delay only the initial grow-in (so bars fill during the receipt's
-          // slide) — hover highlights must react instantly
-          delay: (c) => (c.type === 'data' && c.mode === 'default') ? 450 : 0
-        },
-        // only the segment directly under the cursor triggers the tooltip
-        interaction: { mode: 'nearest', intersect: true },
-        plugins: {
-          legend: { display: false },
-          tooltip: {
-            enabled: false, // built-in tooltip off; we position our own above the bar
-            external: (context) => {
-              // wait until the paper has settled flat — while it's still moving,
-              // segments drift under the cursor and the tooltip would flicker
-              if (window.paperState && !window.paperState.flat) { tip.style.opacity = 0; return; }
-              const t = context.tooltip;
-              if (!t || t.opacity === 0) { tip.style.opacity = 0; return; }
-              const dp = t.dataPoints && t.dataPoints[0];
-              if (dp) {
-                tip.textContent = dp.dataset.label + ': $' + dp.parsed.x.toFixed(2);
-                // centre over the hovered segment (base = segment start, x = segment end),
-                // then nudge inward if it would poke past the receipt's sides
-                const seg = dp.element;
-                const centre = (seg.base + seg.x) / 2;
-                const half = (tip.offsetWidth / 2) || 60;
-                tip.style.left = Math.max(half, Math.min(wrap.clientWidth - half, centre)) + 'px';
-              }
-              tip.style.opacity = 1;
-            }
-          }
-        },
-        scales: {
-          x: { stacked: true, display: false, min: 0, max: 3093.50 }, // max = grand total so the bar spans the full width
-          y: { stacked: true, display: false }
-        }
-      }
-    });
-  })();
-</script>
-
-<script>
-  // Entrance scroll handling: always start at the top (so the receipt lands
-  // exactly at scroll position zero) and lock scrolling until the slide ends.
-  (function() {
-    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
-    window.scrollTo(0, 0);
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return; // no slide = no lock
-    const de = document.documentElement;
-    de.classList.add('entering');
-    const release = () => de.classList.remove('entering');
-    document.querySelector('.receipt-enter')
-      .addEventListener('animationend', release, { once: true });
-    setTimeout(release, 3200); // safety net in case the animation event never fires
-  })();
-
-  // Cursor trail of the receipt's ornament glyphs (skipped for reduced-motion users)
-  (function() {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const glyphs = ['≈', '✻︎', '☼︎', '❀︎', '☾︎', '✶︎', '❋︎'];
-    let next = 0, lastTime = 0;
-    window.addEventListener('mousemove', (e) => {
-      if (e.target && e.target.id === 'tripChart') return; // keep the chart area clear
-      const now = performance.now();
-      if (now - lastTime < 70) return; // one glyph every ~70ms, not every pixel
-      lastTime = now;
-      const g = document.createElement('span');
-      g.className = 'trail-glyph';
-      g.textContent = glyphs[next++ % glyphs.length];
-      g.style.left = e.clientX + 'px';
-      g.style.top = e.clientY + 'px';
-      document.body.appendChild(g);
-      setTimeout(() => g.remove(), 750);
-    });
-  })();
-
-  // 3D tilt — the receipt leans to face the cursor. A soft spring gives it a
-  // gentle paper wobble, the sheet bends a beat behind the base in 3D, and
-  // the shadow swings the opposite way as if the cursor were a light.
-  (function() {
-    // shared with the chart tooltip: it only shows once the paper is flat & still
-    window.paperState = { flat: true };
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    if (!window.matchMedia('(pointer: fine)').matches) return; // no cursor on touch screens
-    const wrap = document.querySelector('.receipt-wrap');
-    const bend = document.querySelector('.receipt-bend');
-    const shadow = document.querySelector('.receipt-shadow');
-    const sheen = document.querySelector('.receipt-sheen');
-    const MAX_TILT = 4;      // degrees at the screen edge (kept gentle so text stays crisp)
-    const SHADOW_SWING = 12; // px of shadow offset at the screen edge
-    const BEND = 1.2;        // how much the sheet flexes while moving
-
-    let targetX = 0, targetY = 0;
-    let x = 0, y = 0, velX = 0, velY = 0; // spring state (the wobble)
-    let lagX = 0, lagY = 0;               // the paper's slower "bend" layer
-
-    // While hovering the bar chart the paper eases flat — a tilted surface
-    // throws off the chart's hover hit-testing, and flat paper reads better
-    // for pointing at segments anyway.
-    let holdFlat = false;
-    const chartWrap = document.querySelector('.chart-wrap');
-    chartWrap.addEventListener('mouseenter', () => { holdFlat = true; });
-    chartWrap.addEventListener('mouseleave', () => { holdFlat = false; });
-
-    let lastMouseX = 0, lastMouseY = 0;
-    window.addEventListener('mousemove', (e) => {
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-      const r = wrap.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      // -1..1 = how far the cursor is from the receipt centre, relative to screen size
-      targetX = Math.max(-1, Math.min(1, (e.clientX - cx) / (window.innerWidth / 2)));
-      targetY = Math.max(-1, Math.min(1, (e.clientY - cy) / (window.innerHeight / 2)));
-    });
-
-    function tick() {
-      if (holdFlat) {
-        // lay flat quickly and without wobble, so the chart is a stable target
-        x += (0 - x) * 0.3; velX = 0;
-        y += (0 - y) * 0.3; velY = 0;
-      } else {
-        // soft spring, damped enough that the wobble is a murmur, not a bounce
-        velX += (targetX - x) * 0.028; velX *= 0.85; x += velX;
-        velY += (targetY - y) * 0.028; velY *= 0.85; y += velY;
-      }
-      const wasFlat = window.paperState.flat;
-      window.paperState.flat = !holdFlat ||
-        (Math.abs(x) < 0.02 && Math.abs(y) < 0.02);
-      // the paper just settled flat under a still cursor — re-trigger the
-      // hover so the chart tooltip appears without needing another mouse move
-      if (holdFlat && window.paperState.flat && !wasFlat) {
-        document.getElementById('tripChart').dispatchEvent(
-          new MouseEvent('mousemove', {clientX: lastMouseX, clientY: lastMouseY, bubbles: true}));
-      }
-      // the bend layer chases the base tilt; the gap between them is the flex
-      lagX += (x - lagX) * 0.12;
-      lagY += (y - lagY) * 0.12;
-
-      wrap.style.transform =
-        'perspective(900px)' +
-        ' rotateX(' + (-y * MAX_TILT).toFixed(2) + 'deg)' +
-        ' rotateY(' + (x * MAX_TILT).toFixed(2) + 'deg)';
-      bend.style.transform =
-        'rotateX(' + (-(y - lagY) * MAX_TILT * BEND).toFixed(2) + 'deg)' +
-        ' rotateY(' + ((x - lagX) * MAX_TILT * BEND).toFixed(2) + 'deg)';
-      shadow.style.transform =
-        'translate3d(' + (-x * SHADOW_SWING).toFixed(1) + 'px, ' +
-        (12 - y * SHADOW_SWING).toFixed(1) + 'px, -40px)';
-      // the light spot slides toward the cursor and brightens
-      // as the light gets more head-on
-      sheen.style.transform =
-        'translate3d(' + (x * wrap.clientWidth * 0.5).toFixed(1) + 'px, ' +
-        (y * wrap.clientHeight * 0.5).toFixed(1) + 'px, 0)';
-      sheen.style.opacity = (0.5 - 0.28 * Math.min(1, Math.hypot(x, y))).toFixed(2);
-      requestAnimationFrame(tick);
+    const target = new Date(2026, 8, 18); // months count from 0, so 8 = September
+    const el = document.getElementById('countdown');
+    const pad = (n) => String(n).padStart(2, '0');
+    function update() {
+      let ms = target - new Date();
+      if (ms < 0) ms = 0;
+      const secs  = Math.floor(ms / 1000);
+      const mins  = Math.floor(secs / 60);
+      const days  = Math.floor(mins / 1440);
+      const hours = Math.floor((mins % 1440) / 60);
+      el.textContent = pad(days) + ' days ' + pad(hours) + ' hours ' +
+        pad(mins % 60) + ' minutes ' + pad(secs % 60) + ' seconds';
     }
-
-    // hold the tilt until the receipt has finished sliding in
-    let tiltStarted = false;
-    const startTilt = () => { if (!tiltStarted) { tiltStarted = true; tick(); } };
-    document.querySelector('.receipt-enter')
-      .addEventListener('animationend', startTilt, { once: true });
-    setTimeout(startTilt, 3200); // safety net in case the animation event never fires
+    update();
+    setInterval(update, 1000);
   })();
 </script>
-
 </body>
 </html>
